@@ -3,8 +3,8 @@ import streamlit as st
 from app.pages.contabil import render_contabil_module
 from app.pages.dashboard import render_dashboard
 from app.pages.dp import render_dp_module
-from fiscal import render_fiscal_module
 from modules.clientes import render_cadastro_clientes
+from modules.fiscal import render_fiscal_module
 from modules.relatorio_clientes import render_relatorio_clientes
 
 
