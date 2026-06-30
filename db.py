@@ -55,3 +55,20 @@ def insert_rows(table_name: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "inserted": len(rows),
         "response": response.data,
     }
+
+
+def fetch_rows(
+    table_name: str,
+    columns: str = "*",
+    order_by: str | None = None,
+    desc: bool = False,
+) -> list[dict[str, Any]]:
+    """Busca registros de uma tabela de forma reutilizavel."""
+    client = get_supabase_client()
+    query = client.table(table_name).select(columns)
+
+    if order_by:
+        query = query.order(order_by, desc=desc)
+
+    response = query.execute()
+    return list(response.data or [])

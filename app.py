@@ -5,6 +5,7 @@ from app.pages.dashboard import render_dashboard
 from app.pages.dp import render_dp_module
 from fiscal import render_fiscal_module
 from modules.clientes import render_cadastro_clientes
+from modules.relatorio_clientes import render_relatorio_clientes
 
 
 def main() -> None:
@@ -22,6 +23,7 @@ def main() -> None:
 			"Módulo Contábil",
 			"Módulo DP",
 			"Gestão de Clientes",
+			"Relatório de Clientes",
 		],
 		index=0,
 	)
@@ -33,6 +35,7 @@ def main() -> None:
 		"Módulo Contábil": render_contabil_module,
 		"Módulo DP": render_dp_module,
 		"Gestão de Clientes": render_cadastro_clientes,
+		"Relatório de Clientes": render_relatorio_clientes,
 	}
 	routes[section]()
 
