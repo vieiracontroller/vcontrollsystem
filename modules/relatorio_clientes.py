@@ -7,6 +7,7 @@ from typing import Any
 import streamlit as st
 
 from db import fetch_rows
+from utils.ui_theme import render_hero
 from utils.validators import format_cnpj
 
 
@@ -77,8 +78,10 @@ def _apply_filters(
 
 def render_relatorio_clientes() -> None:
     """Renderiza relatorio da base de clientes cadastrada no Supabase."""
-    st.title("Relatorio de Clientes")
-    st.caption("Visao analitica da base cadastrada com filtros e exportacao.")
+    render_hero(
+        "Relatorio de Clientes",
+        "Visao analitica da base cadastrada com filtros gerenciais e exportacao CSV.",
+    )
 
     if st.button("Atualizar base", type="secondary"):
         st.cache_data.clear()
@@ -102,6 +105,7 @@ def render_relatorio_clientes() -> None:
     regimes = sorted({r["regime_tributario"] for r in flat_rows if r["regime_tributario"]})
     estados = sorted({r["estado"] for r in flat_rows if r["estado"]})
 
+    st.markdown('<div class="vc-panel">', unsafe_allow_html=True)
     f1, f2, f3, f4 = st.columns([1.2, 1, 1.2, 1.6])
     with f1:
         regime_filter = st.selectbox("Regime", ["Todos", *regimes], index=0)
@@ -111,6 +115,7 @@ def render_relatorio_clientes() -> None:
         cidade_filter = st.text_input("Cidade", placeholder="Ex: Sao Paulo")
     with f4:
         busca = st.text_input("Buscar", placeholder="Razao social ou CNPJ")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     filtered_rows = _apply_filters(
         rows=flat_rows,

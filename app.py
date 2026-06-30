@@ -8,14 +8,23 @@ from modules.fiscal import render_fiscal_module
 from modules.produtos import render_produtos_module
 from modules.relatorio_clientes import render_relatorio_clientes
 from modules.sped import render_sped_module
+from utils.ui_theme import apply_global_theme, render_shell_header
 
 
 def main() -> None:
 	"""Ponto de entrada da UI com navegacao lateral entre modulos."""
 	st.set_page_config(page_title="V-Controll System", page_icon="VC", layout="wide")
+	apply_global_theme()
 
-	st.sidebar.title("V-Controll")
-	st.sidebar.caption("SaaS Contabil • Fiscal • DP")
+	st.sidebar.markdown(
+		"""
+		<div class="vc-sidebar-brand">
+			<strong>V-Controll</strong><br/>
+			<span style="opacity:0.85; font-size:0.9rem;">Plataforma Fiscal e Contabil</span>
+		</div>
+		""",
+		unsafe_allow_html=True,
+	)
 
 	section = st.sidebar.radio(
 		"Navegacao",
@@ -43,6 +52,7 @@ def main() -> None:
 		"Gestão de Clientes": render_cadastro_clientes,
 		"Relatório de Clientes": render_relatorio_clientes,
 	}
+	render_shell_header(section)
 	routes[section]()
 
 

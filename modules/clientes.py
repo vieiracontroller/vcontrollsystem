@@ -5,6 +5,7 @@ from typing import Any
 import streamlit as st
 
 from db import get_supabase_client
+from utils.ui_theme import render_hero
 from utils.validators import format_cnpj, is_valid_cnpj, only_digits
 
 
@@ -67,14 +68,17 @@ def _save_cliente(payload: dict[str, Any]) -> tuple[bool, str]:
 
 def render_cadastro_clientes() -> None:
     """Renderiza formulario robusto de cadastro de clientes."""
-    st.title("Gestao de Clientes")
-    st.caption("Cadastro completo com validacao fiscal e persistencia no Supabase.")
+    render_hero(
+        "Gestao de Clientes",
+        "Cadastro completo com validacoes fiscais, endereco estruturado e persistencia no Supabase.",
+    )
 
     if "clientes_form_nonce" not in st.session_state:
         st.session_state["clientes_form_nonce"] = 1
 
     nonce = st.session_state["clientes_form_nonce"]
 
+    st.markdown('<div class="vc-panel">', unsafe_allow_html=True)
     with st.form(key=f"cadastro_clientes_form_{nonce}", clear_on_submit=True):
         st.subheader("Dados principais")
         razao_social = st.text_input("Razao Social *", max_chars=180)
@@ -135,6 +139,7 @@ def render_cadastro_clientes() -> None:
         observacoes = st.text_area("Observacoes", height=120)
 
         submitted = st.form_submit_button("Salvar cliente", type="primary")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if not submitted:
         return
