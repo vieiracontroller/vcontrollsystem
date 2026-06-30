@@ -98,5 +98,10 @@ def render_importacao_xml() -> None:
             if isinstance(warnings, list):
                 for warning in warnings:
                     st.warning(str(warning))
+
+            invalids = sync_result.get("invalid", [])
+            if isinstance(invalids, list):
+                for invalid in invalids:
+                    st.error(str(invalid))
         except Exception as exc:
             st.error(f"Falha ao salvar no Supabase: {exc}")

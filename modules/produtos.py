@@ -5,6 +5,7 @@ from typing import Any
 import streamlit as st
 
 from db import fetch_rows, upsert_rows
+from utils.tributario_validators import validar_produto_fiscal
 
 
 def _load_clientes() -> list[dict[str, Any]]:
@@ -20,7 +21,10 @@ def _load_produtos(cliente_id: str) -> list[dict[str, Any]]:
     """Carrega produtos por cliente para exibicao e edicao fiscal."""
     return fetch_rows(
         table_name="produtos",
-        columns="id,cliente_id,codigo_interno,descricao,ncm,cest,unidade_medida,aliquota_padrao_icms",
+        columns=(
+            "id,cliente_id,codigo_interno,descricao,ncm,cest,unidade_medida,"
+            "cfop_padrao,cst_icms,aliquota_padrao_icms,aliquota_ibs,aliquota_cbs"
+        ),
         eq_filters={"cliente_id": cliente_id},
         order_by="descricao",
     )
@@ -29,7 +33,10 @@ def _load_produtos(cliente_id: str) -> list[dict[str, Any]]:
 def render_produtos_module() -> None:
     """Tela de gestao de produtos com foco em campos fiscais."""
     st.title("Cadastro de Produtos")
-    st.caption("Edite NCM, CEST e aliquota padrao de ICMS dos produtos sincronizados por XML.")
+    st.caption(
+        "Edite dados fiscais de ICMS e reforma tributaria (IBS/CBS) "
+        "dos produtos sincronizados por XML."
+    )
 
     try:
         clientes = _load_clientes()
@@ -70,35 +77,67 @@ def render_produtos_module() -> None:
         descricao = st.text_input("Descricao", value=str(produto.get("descricao") or ""))
         ncm = st.text_input("NCM", value=str(produto.get("ncm") or ""), max_chars=8)
         cest = st.text_input("CEST", value=str(produto.get("cest") or ""), max_chars=7)
+        cfop = st.text_input("CFOP padrao", value=str(produto.get("cfop_padrao") or ""), max_chars=4)
+        cst_icms = st.text_input("CST/CSOSN ICMS", value=str(produto.get("cst_icms") or ""), max_chars=3)
         unidade = st.text_input(
             "Unidade de medida",
             value=str(produto.get("unidade_medida") or ""),
             max_chars=6,
         )
-        aliquota = st.number_input(
+        aliquota_icms = st.number_input(
             "Aliquota padrao ICMS (%)",
             min_value=0.0,
             max_value=100.0,
             value=float(produto.get("aliquota_padrao_icms") or 0.0),
             step=0.01,
         )
+        c1, c2 = st.columns(2)
+        with c1:
+            aliquota_ibs = st.number_input(
+                "Aliquota IBS (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=float(produto.get("aliquota_ibs") or 0.0),
+                step=0.01,
+            )
+        with c2:
+            aliquota_cbs = st.number_input(
+                "Aliquota CBS (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=float(produto.get("aliquota_cbs") or 0.0),
+                step=0.01,
+            )
 
         submitted = st.form_submit_button("Salvar alteracoes", type="primary")
 
     if not submitted:
         return
 
-    payload = [
-        {
-            "cliente_id": produto.get("cliente_id"),
-            "codigo_interno": produto.get("codigo_interno"),
-            "descricao": descricao.strip(),
-            "ncm": ncm.strip(),
-            "cest": cest.strip(),
-            "unidade_medida": unidade.strip(),
-            "aliquota_padrao_icms": float(aliquota),
-        }
-    ]
+    produto_editado = {
+        "cliente_id": produto.get("cliente_id"),
+        "codigo_interno": produto.get("codigo_interno"),
+        "descricao": descricao.strip(),
+        "ncm": ncm.strip(),
+        "cest": cest.strip(),
+        "cfop_padrao": cfop.strip(),
+        "cst_icms": cst_icms.strip(),
+        "unidade_medida": unidade.strip(),
+        "aliquota_padrao_icms": float(aliquota_icms),
+        "aliquota_ibs": float(aliquota_ibs),
+        "aliquota_cbs": float(aliquota_cbs),
+    }
+
+    produto_normalizado, errors, warnings = validar_produto_fiscal(produto_editado)
+    for warning in warnings:
+        st.warning(warning)
+
+    if errors:
+        for error in errors:
+            st.error(error)
+        return
+
+    payload = [produto_normalizado]
 
     try:
         result = upsert_rows(

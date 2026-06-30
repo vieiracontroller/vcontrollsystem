@@ -6,6 +6,7 @@ from io import BytesIO
 import xml.etree.ElementTree as ET
 
 from db import fetch_rows, upsert_rows
+from utils.tributario_validators import validar_produto_fiscal
 
 NFE_NAMESPACE = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
 
@@ -61,6 +62,9 @@ def _parse_produtos_nfe(content: bytes, cliente_id: str) -> list[dict[str, objec
 
         icms_node = det.find(".//nfe:ICMS/*", NFE_NAMESPACE)
         aliquota_icms = _to_float(_find_text(icms_node, "nfe:pICMS")) if icms_node is not None else 0.0
+        cst_icms = ""
+        if icms_node is not None:
+            cst_icms = _find_text(icms_node, "nfe:CST") or _find_text(icms_node, "nfe:CSOSN")
 
         codigo = _find_text(prod, "nfe:cProd")
         if not codigo:
@@ -74,7 +78,11 @@ def _parse_produtos_nfe(content: bytes, cliente_id: str) -> list[dict[str, objec
                 "ncm": _find_text(prod, "nfe:NCM"),
                 "cest": _find_text(prod, "nfe:CEST"),
                 "unidade_medida": _find_text(prod, "nfe:uCom"),
+                "cfop_padrao": _find_text(prod, "nfe:CFOP"),
+                "cst_icms": cst_icms,
                 "aliquota_padrao_icms": aliquota_icms,
+                "aliquota_ibs": 0.0,
+                "aliquota_cbs": 0.0,
                 "updated_at": datetime.utcnow().isoformat(),
             }
         )
@@ -93,6 +101,7 @@ def sincronizar_produtos_por_xml(xml_payloads: list[XMLProdutoPayload]) -> dict[
     """
     produtos_upsert: list[dict[str, object]] = []
     avisos: list[str] = []
+    invalidos: list[str] = []
 
     for payload in xml_payloads:
         try:
@@ -107,7 +116,22 @@ def sincronizar_produtos_por_xml(xml_payloads: list[XMLProdutoPayload]) -> dict[
                 continue
 
             produtos = _parse_produtos_nfe(payload.content, cliente_id=cliente_id)
-            produtos_upsert.extend(produtos)
+
+            for produto in produtos:
+                normalized, errors, warnings = validar_produto_fiscal(produto)
+                for warning in warnings:
+                    avisos.append(
+                        f"{payload.file_name} / {produto.get('codigo_interno')}: {warning}"
+                    )
+
+                if errors:
+                    invalidos.append(
+                        f"{payload.file_name} / {produto.get('codigo_interno')}: "
+                        + "; ".join(errors)
+                    )
+                    continue
+
+                produtos_upsert.append(normalized)
         except Exception as exc:
             avisos.append(f"{payload.file_name}: erro no processamento ({exc}).")
 
@@ -116,6 +140,7 @@ def sincronizar_produtos_por_xml(xml_payloads: list[XMLProdutoPayload]) -> dict[
             "status": "skipped",
             "processed": 0,
             "warnings": avisos,
+            "invalid": invalidos,
             "detail": "Nenhum produto elegivel para sincronizacao.",
         }
 
@@ -126,4 +151,5 @@ def sincronizar_produtos_por_xml(xml_payloads: list[XMLProdutoPayload]) -> dict[
     )
 
     result["warnings"] = avisos
+    result["invalid"] = invalidos
     return result
