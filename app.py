@@ -6,6 +6,7 @@ from app.pages.dp import render_dp_module
 from modules.clientes import render_cadastro_clientes
 from modules.fiscal import render_fiscal_module
 from modules.relatorio_clientes import render_relatorio_clientes
+from modules.sped import render_sped_module
 
 
 def main() -> None:
@@ -20,6 +21,7 @@ def main() -> None:
 		[
 			"Dashboard",
 			"Módulo Fiscal",
+			"Módulo SPED Fiscal",
 			"Módulo Contábil",
 			"Módulo DP",
 			"Gestão de Clientes",
@@ -32,6 +34,7 @@ def main() -> None:
 	routes = {
 		"Dashboard": render_dashboard,
 		"Módulo Fiscal": render_fiscal_module,
+		"Módulo SPED Fiscal": render_sped_module,
 		"Módulo Contábil": render_contabil_module,
 		"Módulo DP": render_dp_module,
 		"Gestão de Clientes": render_cadastro_clientes,
