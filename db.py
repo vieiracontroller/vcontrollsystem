@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 import streamlit as st
-from supabase import Client, create_client
+
+try:
+    from supabase import create_client
+except ModuleNotFoundError:
+    create_client = None
 
 
 def _get_secret_value(section: str, key: str, fallback_key: str) -> str:
@@ -17,8 +21,14 @@ def _get_secret_value(section: str, key: str, fallback_key: str) -> str:
 
 
 @st.cache_resource(show_spinner=False)
-def get_supabase_client() -> Client:
+def get_supabase_client() -> Any:
     """Centraliza a criacao do cliente Supabase para reuso na aplicacao."""
+    if create_client is None:
+        raise RuntimeError(
+            "Biblioteca Supabase indisponivel no ambiente. "
+            "Adicione 'supabase' no requirements.txt e refaca o deploy."
+        )
+
     url = _get_secret_value("supabase", "url", "SUPABASE_URL")
     key = _get_secret_value("supabase", "key", "SUPABASE_KEY")
 
