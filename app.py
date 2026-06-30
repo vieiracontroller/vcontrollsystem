@@ -4,6 +4,7 @@ from app.pages.contabil import render_contabil_module
 from app.pages.dashboard import render_dashboard
 from app.pages.dp import render_dp_module
 from fiscal import render_fiscal_module
+from modules.clientes import render_cadastro_clientes
 
 
 def main() -> None:
@@ -15,7 +16,13 @@ def main() -> None:
 
 	section = st.sidebar.radio(
 		"Navegacao",
-		["Dashboard", "Módulo Fiscal", "Módulo Contábil", "Módulo DP"],
+		[
+			"Dashboard",
+			"Módulo Fiscal",
+			"Módulo Contábil",
+			"Módulo DP",
+			"Gestão de Clientes",
+		],
 		index=0,
 	)
 
@@ -25,6 +32,7 @@ def main() -> None:
 		"Módulo Fiscal": render_fiscal_module,
 		"Módulo Contábil": render_contabil_module,
 		"Módulo DP": render_dp_module,
+		"Gestão de Clientes": render_cadastro_clientes,
 	}
 	routes[section]()
 
