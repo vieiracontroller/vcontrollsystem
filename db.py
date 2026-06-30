@@ -62,13 +62,42 @@ def fetch_rows(
     columns: str = "*",
     order_by: str | None = None,
     desc: bool = False,
+    eq_filters: dict[str, Any] | None = None,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Busca registros de uma tabela de forma reutilizavel."""
     client = get_supabase_client()
     query = client.table(table_name).select(columns)
 
+    if eq_filters:
+        for key, value in eq_filters.items():
+            query = query.eq(key, value)
+
     if order_by:
         query = query.order(order_by, desc=desc)
 
+    if limit is not None:
+        query = query.limit(limit)
+
     response = query.execute()
     return list(response.data or [])
+
+
+def upsert_rows(
+    table_name: str,
+    rows: list[dict[str, Any]],
+    on_conflict: str,
+) -> dict[str, Any]:
+    """Executa upsert em lote para inserir ou atualizar registros."""
+    if not rows:
+        return {"status": "skipped", "detail": "Nenhum registro para upsert."}
+
+    client = get_supabase_client()
+    response = client.table(table_name).upsert(rows, on_conflict=on_conflict).execute()
+
+    return {
+        "status": "ok",
+        "table": table_name,
+        "processed": len(rows),
+        "response": response.data,
+    }

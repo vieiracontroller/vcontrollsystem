@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 import streamlit as st
 
 from db import insert_rows
+from fiscal.importador_xml import XMLProdutoPayload, sincronizar_produtos_por_xml
 
 NFE_NAMESPACE = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
 DEFAULT_FISCAL_TABLE = "fiscal_nfe_imports"
@@ -55,12 +56,15 @@ def render_importacao_xml() -> None:
         return
 
     parsed_rows: list[dict[str, str | float]] = []
+    xml_payloads: list[XMLProdutoPayload] = []
     errors: list[str] = []
 
     # Processa arquivo por arquivo para evitar falha total em lote misto.
     for file_obj in uploaded_files:
         try:
-            parsed_rows.append(_parse_nfe_xml(file_obj, file_obj.name))
+            content = file_obj.getvalue()
+            parsed_rows.append(_parse_nfe_xml(BytesIO(content), file_obj.name))
+            xml_payloads.append(XMLProdutoPayload(file_name=file_obj.name, content=content))
         except Exception as exc:
             errors.append(f"{file_obj.name}: {exc}")
 
@@ -80,5 +84,19 @@ def render_importacao_xml() -> None:
                 f"Importacao concluida. Registros enviados: {result.get('inserted', 0)}"
             )
             st.json(result)
+
+            sync_result = sincronizar_produtos_por_xml(xml_payloads)
+            if sync_result.get("status") == "ok":
+                st.success(
+                    "Cadastro inteligente de produtos sincronizado. "
+                    f"Registros processados: {sync_result.get('processed', 0)}"
+                )
+            else:
+                st.warning(str(sync_result.get("detail", "Sem atualizacao de produtos.")))
+
+            warnings = sync_result.get("warnings", [])
+            if isinstance(warnings, list):
+                for warning in warnings:
+                    st.warning(str(warning))
         except Exception as exc:
             st.error(f"Falha ao salvar no Supabase: {exc}")
