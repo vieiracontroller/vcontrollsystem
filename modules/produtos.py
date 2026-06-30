@@ -5,6 +5,7 @@ from typing import Any
 import streamlit as st
 
 from db import fetch_rows, upsert_rows
+from utils.beneficios_ncm import beneficios_sugeridos_por_ncm
 from utils.tributario_validators import validar_produto_fiscal
 
 
@@ -23,7 +24,8 @@ def _load_produtos(cliente_id: str) -> list[dict[str, Any]]:
         table_name="produtos",
         columns=(
             "id,cliente_id,codigo_interno,descricao,ncm,cest,unidade_medida,"
-            "cfop_padrao,cst_icms,aliquota_padrao_icms,aliquota_ibs,aliquota_cbs"
+            "cfop_padrao,cst_icms,cclasstrib,beneficios_fiscais,"
+            "aliquota_padrao_icms,aliquota_ibs,aliquota_cbs"
         ),
         eq_filters={"cliente_id": cliente_id},
         order_by="descricao",
@@ -79,6 +81,30 @@ def render_produtos_module() -> None:
         cest = st.text_input("CEST", value=str(produto.get("cest") or ""), max_chars=7)
         cfop = st.text_input("CFOP padrao", value=str(produto.get("cfop_padrao") or ""), max_chars=4)
         cst_icms = st.text_input("CST/CSOSN ICMS", value=str(produto.get("cst_icms") or ""), max_chars=3)
+        cclasstrib = st.text_input(
+            "cClassTrib",
+            value=str(produto.get("cclasstrib") or ""),
+            max_chars=10,
+        )
+
+        beneficios_existentes = produto.get("beneficios_fiscais") or []
+        if not isinstance(beneficios_existentes, list):
+            beneficios_existentes = []
+
+        sugestoes = beneficios_sugeridos_por_ncm(ncm)
+        if sugestoes:
+            st.caption("Sugestoes de beneficios por NCM: " + ", ".join(sugestoes))
+
+        beneficios_sugeridos = st.multiselect(
+            "Beneficios fiscais (sugeridos)",
+            options=sugestoes,
+            default=[b for b in beneficios_existentes if b in sugestoes],
+        )
+        beneficios_livres = st.text_input(
+            "Outros beneficios fiscais (separados por virgula)",
+            value=", ".join([b for b in beneficios_existentes if b not in sugestoes]),
+        )
+
         unidade = st.text_input(
             "Unidade de medida",
             value=str(produto.get("unidade_medida") or ""),
@@ -122,6 +148,9 @@ def render_produtos_module() -> None:
         "cest": cest.strip(),
         "cfop_padrao": cfop.strip(),
         "cst_icms": cst_icms.strip(),
+        "cclasstrib": cclasstrib.strip(),
+        "beneficios_fiscais": beneficios_sugeridos
+        + [item.strip().upper() for item in beneficios_livres.split(",") if item.strip()],
         "unidade_medida": unidade.strip(),
         "aliquota_padrao_icms": float(aliquota_icms),
         "aliquota_ibs": float(aliquota_ibs),

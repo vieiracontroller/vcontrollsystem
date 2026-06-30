@@ -63,8 +63,10 @@ def _parse_produtos_nfe(content: bytes, cliente_id: str) -> list[dict[str, objec
         icms_node = det.find(".//nfe:ICMS/*", NFE_NAMESPACE)
         aliquota_icms = _to_float(_find_text(icms_node, "nfe:pICMS")) if icms_node is not None else 0.0
         cst_icms = ""
+        cbenef = ""
         if icms_node is not None:
             cst_icms = _find_text(icms_node, "nfe:CST") or _find_text(icms_node, "nfe:CSOSN")
+            cbenef = _find_text(icms_node, "nfe:cBenef")
 
         codigo = _find_text(prod, "nfe:cProd")
         if not codigo:
@@ -80,6 +82,12 @@ def _parse_produtos_nfe(content: bytes, cliente_id: str) -> list[dict[str, objec
                 "unidade_medida": _find_text(prod, "nfe:uCom"),
                 "cfop_padrao": _find_text(prod, "nfe:CFOP"),
                 "cst_icms": cst_icms,
+                "cclasstrib": _find_text(prod, "nfe:cClassTrib"),
+                "beneficios_fiscais": [
+                    item
+                    for item in [_find_text(prod, "nfe:cBenef"), cbenef]
+                    if item
+                ],
                 "aliquota_padrao_icms": aliquota_icms,
                 "aliquota_ibs": 0.0,
                 "aliquota_cbs": 0.0,
