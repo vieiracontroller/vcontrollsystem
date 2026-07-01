@@ -489,11 +489,10 @@ def render_importacao_central() -> None:
         accept_multiple_files=True,
     )
 
-    classificacao_lote = st.radio(
+    classificacao_lote = st.selectbox(
         "Tipo de XML do lote",
         MODO_CLASSIFICACAO,
         index=0,
-        horizontal=True,
         help="Use AUTOMATICA para detectar pelo XML ou force o tipo para todo o lote.",
     )
 
