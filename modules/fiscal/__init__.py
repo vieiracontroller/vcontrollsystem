@@ -15,6 +15,7 @@ from db import fetch_rows, insert_rows
 from fiscal.importador_xml import XMLProdutoPayload, sincronizar_produtos_por_xml
 from fiscal.receita_federal_gateway import ReceitaDownloadRequest, SefazDistribuicaoDFeGateway
 from modules.fiscal.apuracao import render_apuracao_impostos
+from modules.fiscal.importacao_central import render_importacao_central
 from modules.produtos import render_produtos_module
 from modules.sped import render_sped_module
 
@@ -279,6 +280,7 @@ def render_fiscal_module() -> None:
 
     menu_items = [
         "Dashboard Fiscal",
+        "Centro de Importacao Fiscal",
         "Puxador de Notas (SEFAZ)",
         "Cadastro de Produtos",
         "Apuracao de Impostos",
@@ -288,6 +290,7 @@ def render_fiscal_module() -> None:
 
     routes = {
         "Dashboard Fiscal": render_dashboard_fiscal,
+        "Centro de Importacao Fiscal": render_importacao_central,
         "Puxador de Notas (SEFAZ)": render_puxador,
         "Cadastro de Produtos": render_produtos_module,
         "Apuracao de Impostos": render_apuracao_impostos,

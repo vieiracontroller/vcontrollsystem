@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
 from datetime import date
+from datetime import datetime
+from io import BytesIO
 from typing import Any
 
 import streamlit as st
@@ -24,6 +27,47 @@ def _empresa_uf(empresa: dict[str, Any]) -> str:
     """Extrai UF da empresa a partir do JSON de endereco."""
     endereco = empresa.get("endereco") or {}
     return str(endereco.get("estado") or "").strip().upper()
+
+
+def _parse_iso_date(value: str | None) -> date | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    text = text[:10]
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _load_xmls_importados(cliente_id: str, inicio: date, fim: date) -> list[tuple[str, bytes]]:
+    rows = fetch_rows(
+        table_name="fiscal_nfe_xml_cache",
+        columns="arquivo,data_emissao,xml_base64",
+        eq_filters={"cliente_id": cliente_id},
+        order_by="data_emissao",
+        desc=False,
+        limit=5000,
+    )
+
+    xmls: list[tuple[str, bytes]] = []
+    for row in rows:
+        dt = _parse_iso_date(str(row.get("data_emissao") or ""))
+        if dt is None:
+            continue
+        if not (inicio <= dt <= fim):
+            continue
+
+        encoded = str(row.get("xml_base64") or "").strip()
+        if not encoded:
+            continue
+
+        try:
+            xmls.append((str(row.get("arquivo") or "sem_nome.xml"), base64.b64decode(encoded)))
+        except Exception:
+            continue
+
+    return xmls
 
 
 def render_sped_module() -> None:
@@ -64,14 +108,18 @@ def render_sped_module() -> None:
             step=1,
         )
 
-    arquivos = st.file_uploader(
-        "Upload XMLs NF-e para mapear SPED",
-        type=["xml"],
-        accept_multiple_files=True,
-    )
+    inicio = date(int(ano), int(mes), 1)
+    fim = date(int(ano), int(mes), 28)
+    while True:
+        try:
+            fim = date(int(ano), int(mes), fim.day + 1)
+        except ValueError:
+            break
 
+    st.info("Importacao de XML centralizada no menu fiscal em 'Centro de Importacao Fiscal'.")
+    arquivos = _load_xmls_importados(str(empresa.get("id") or ""), inicio, fim)
     if not arquivos:
-        st.info("Envie XMLs para gerar C100/C170 e exportar o .txt do SPED.")
+        st.warning("Nenhum XML importado encontrado no periodo. Use o Centro de Importacao Fiscal.")
         return
 
     mapped_records: list[dict[str, object]] = []
@@ -81,9 +129,9 @@ def render_sped_module() -> None:
     uf_empresa = _empresa_uf(empresa)
     cnpj_empresa = str(empresa.get("cnpj") or "")
 
-    for xml_file in arquivos:
+    for file_name, xml_content in arquivos:
         try:
-            mapped = map_xml_to_sped_records(xml_file, file_name=xml_file.name)
+            mapped = map_xml_to_sped_records(BytesIO(xml_content), file_name=file_name)
             mapped_records.append(mapped)
 
             c100 = mapped["C100"]
@@ -98,7 +146,7 @@ def render_sped_module() -> None:
             )
             apuracoes_icms.append(apurar_icms_dict(payload))
         except Exception as exc:
-            avisos.append(f"{xml_file.name}: {exc}")
+            avisos.append(f"{file_name}: {exc}")
 
     for aviso in avisos:
         st.warning(aviso)
