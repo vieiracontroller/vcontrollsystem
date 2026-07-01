@@ -33,6 +33,31 @@ V-Controll System/
 - Processamento de XML no modulo fiscal e pronto para extrair utilitarios para utils/.
 - Segredos de infraestrutura ficam em st.secrets.
 
+## Motor de Download NF-e (Servico licensiavel)
+
+### Componentes
+- `fiscal/nfe_downloader.py`: orquestrador de servico sem dependencia de Streamlit.
+- `fiscal/certificados.py`: carga e validacao de certificado A1 por cliente.
+- `fiscal/receita_federal_gateway.py`: comunicacao HTTP mTLS com distribuicao DF-e.
+
+### Fluxo Receita/SEFAZ
+1. Resolver `cliente_id` por XML ou CNPJ informado.
+2. Carregar A1 ativo em `certificados_clientes` e validar senha/validade.
+3. Consultar `planos_contratados` para liberar download/apuracao/SPED.
+4. Chamar gateway de distribuicao DF-e com mTLS (certificado + chave privada).
+5. Descompactar `docZip` retornado pelo webservice em XML NF-e.
+6. Persistir em `fiscal_nfe_imports`, sincronizar produtos e registrar `logs_de_uso`.
+
+### Persistencia de apoio
+- `planos_contratados`: controle de recursos por cliente.
+- `logs_de_uso`: auditoria para billing SaaS.
+- `certificados_clientes`: armazenamento do A1 (PFX base64 + senha).
+- `nfe_distribuicao_cursor`: cursor de NSU para consultas incrementais.
+
+### Configuracoes de ambiente
+- `NFE_DFE_URL_PRODUCAO`
+- `NFE_DFE_URL_HOMOLOGACAO`
+
 ## Segredos esperados (Streamlit Cloud)
 
 ```toml

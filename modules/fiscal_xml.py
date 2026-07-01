@@ -1,43 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-from io import BytesIO
-import xml.etree.ElementTree as ET
-
 import streamlit as st
 
-from db import insert_rows
-from fiscal.importador_xml import XMLProdutoPayload, sincronizar_produtos_por_xml
+from fiscal.importador_xml import XMLProdutoPayload
+from fiscal.nfe_downloader import NFeDownloaderRequest, NFeDownloaderService
+from fiscal.receita_federal_gateway import ReceitaDownloadRequest
 
-NFE_NAMESPACE = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
 DEFAULT_FISCAL_TABLE = "fiscal_nfe_imports"
-
-
-def _find_text(node: ET.Element, path: str) -> str:
-    """Busca texto em um caminho XML com namespace e retorna string limpa."""
-    found = node.find(path, NFE_NAMESPACE)
-    return (found.text or "").strip() if found is not None else ""
-
-
-def _parse_nfe_xml(raw_file: BytesIO, original_name: str) -> dict[str, str | float]:
-    """Extrai campos essenciais da NF-e para uso fiscal e persistencia."""
-    tree = ET.parse(raw_file)
-    root = tree.getroot()
-
-    emitente = _find_text(root, ".//nfe:emit/nfe:xNome")
-    cnpj = _find_text(root, ".//nfe:emit/nfe:CNPJ")
-    valor_str = _find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vNF")
-
-    valor = float(valor_str.replace(",", ".")) if valor_str else 0.0
-
-    return {
-        "arquivo": original_name,
-        "emitente": emitente,
-        "cnpj_emitente": cnpj,
-        "valor_total": valor,
-        "origem": "upload_streamlit",
-        "criado_em": datetime.utcnow().isoformat(),
-    }
 
 
 def render_importacao_xml() -> None:
@@ -51,7 +20,31 @@ def render_importacao_xml() -> None:
         accept_multiple_files=True,
     )
 
-    if not uploaded_files:
+    st.markdown("### Download direto Receita/SEFAZ")
+    baixar_da_receita = st.checkbox("Baixar NF-e direto da Receita", value=False)
+
+    receita_request: ReceitaDownloadRequest | None = None
+    if baixar_da_receita:
+        col1, col2 = st.columns(2)
+        with col1:
+            cnpj_autor = st.text_input("CNPJ do autor", value="")
+        with col2:
+            uf_autor = st.text_input("UF do autor", value="").upper()
+
+        col3, col4 = st.columns(2)
+        with col3:
+            ult_nsu = st.text_input("Ultimo NSU", value="000000000000000")
+        with col4:
+            ambiente = st.selectbox("Ambiente", ["producao", "homologacao"], index=0)
+
+        receita_request = ReceitaDownloadRequest(
+            cnpj_autor=cnpj_autor.strip(),
+            uf_autor=uf_autor.strip(),
+            ult_nsu=ult_nsu.strip() or "000000000000000",
+            ambiente=ambiente,
+        )
+
+    if not uploaded_files and not baixar_da_receita:
         st.info("Aguardando upload dos XMLs.")
         return
 
@@ -60,15 +53,16 @@ def render_importacao_xml() -> None:
     errors: list[str] = []
 
     # Processa arquivo por arquivo para evitar falha total em lote misto.
-    for file_obj in uploaded_files:
+    for file_obj in uploaded_files or []:
         try:
             content = file_obj.getvalue()
-            parsed_rows.append(_parse_nfe_xml(BytesIO(content), file_obj.name))
+            parsed_rows.append({"arquivo": file_obj.name})
             xml_payloads.append(XMLProdutoPayload(file_name=file_obj.name, content=content))
         except Exception as exc:
             errors.append(f"{file_obj.name}: {exc}")
 
-    st.dataframe(parsed_rows, use_container_width=True, hide_index=True)
+    if parsed_rows:
+        st.dataframe(parsed_rows, use_container_width=True, hide_index=True)
 
     if errors:
         st.warning("Alguns arquivos nao puderam ser lidos:")
@@ -76,30 +70,56 @@ def render_importacao_xml() -> None:
             st.write(f"- {err}")
 
     table_name = st.text_input("Tabela destino", value=DEFAULT_FISCAL_TABLE)
+    solicitante = st.text_input("Solicitante (opcional)", value="streamlit_ui")
+
+    col_apuracao, col_sped = st.columns(2)
+    with col_apuracao:
+        executar_apuracao = st.checkbox("Executar apuracao", value=False)
+    with col_sped:
+        executar_sped = st.checkbox("Gerar SPED", value=False)
 
     if st.button("Salvar XMLs no Supabase", type="primary"):
         try:
-            result = insert_rows(table_name=table_name, rows=parsed_rows)
-            st.success(
-                f"Importacao concluida. Registros enviados: {result.get('inserted', 0)}"
+            service = NFeDownloaderService(fiscal_table=table_name)
+            result = service.processar(
+                NFeDownloaderRequest(
+                    xml_payloads=xml_payloads,
+                    solicitante=solicitante,
+                    origem="streamlit_ui",
+                    executar_apuracao=executar_apuracao,
+                    executar_sped=executar_sped,
+                    baixar_da_receita=baixar_da_receita,
+                    receita_request=receita_request,
+                )
             )
+
+            status = str(result.get("status") or "")
+            if status == "SUCCESS":
+                st.success(
+                    "Importacao concluida com sucesso. "
+                    f"Registros processados: {result.get('processed', 0)}"
+                )
+            elif status == "CERTIFICATE_EXPIRED":
+                st.error("Falha no certificado digital: certificado expirado.")
+            elif status == "CERTIFICATE_MISSING":
+                st.error("Cliente sem certificado A1 cadastrado para download.")
+            elif status == "CERTIFICATE_INVALID":
+                st.error("Certificado A1 invalido ou senha incorreta.")
+            elif status == "PERMISSION_DENIED":
+                st.error("Plano contratado nao permite essa operacao.")
+            elif status == "CLIENT_NOT_FOUND":
+                st.error("Cliente nao encontrado para os XMLs enviados.")
+            else:
+                st.error("Falha no processamento do servico de NF-e.")
+
             st.json(result)
 
-            sync_result = sincronizar_produtos_por_xml(xml_payloads)
-            if sync_result.get("status") == "ok":
-                st.success(
-                    "Cadastro inteligente de produtos sincronizado. "
-                    f"Registros processados: {sync_result.get('processed', 0)}"
-                )
-            else:
-                st.warning(str(sync_result.get("detail", "Sem atualizacao de produtos.")))
-
-            warnings = sync_result.get("warnings", [])
+            warnings = result.get("warnings", [])
             if isinstance(warnings, list):
                 for warning in warnings:
                     st.warning(str(warning))
 
-            invalids = sync_result.get("invalid", [])
+            invalids = result.get("invalid", [])
             if isinstance(invalids, list):
                 for invalid in invalids:
                     st.error(str(invalid))

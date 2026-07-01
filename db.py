@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import os
+from functools import lru_cache
 from typing import Any
 
-import streamlit as st
+try:
+    import streamlit as st
+except ModuleNotFoundError:
+    st = None
 
 try:
     from supabase import create_client
@@ -12,16 +17,19 @@ except ModuleNotFoundError:
 
 def _get_secret_value(section: str, key: str, fallback_key: str) -> str:
     """Le um segredo no formato TOML por secao ou por chave plana."""
-    section_data = st.secrets.get(section, {})
-    if isinstance(section_data, dict) and key in section_data:
-        return str(section_data[key])
-    if fallback_key in st.secrets:
-        return str(st.secrets[fallback_key])
+    if st is not None:
+        section_data = st.secrets.get(section, {})
+        if isinstance(section_data, dict) and key in section_data:
+            return str(section_data[key])
+        if fallback_key in st.secrets:
+            return str(st.secrets[fallback_key])
+    env_value = os.getenv(fallback_key, "")
+    if env_value:
+        return env_value
     return ""
 
 
-@st.cache_resource(show_spinner=False)
-def get_supabase_client() -> Any:
+def _create_supabase_client() -> Any:
     """Centraliza a criacao do cliente Supabase para reuso na aplicacao."""
     if create_client is None:
         raise RuntimeError(
@@ -39,6 +47,19 @@ def get_supabase_client() -> Any:
         )
 
     return create_client(url, key)
+
+
+if st is not None:
+
+    @st.cache_resource(show_spinner=False)
+    def get_supabase_client() -> Any:
+        return _create_supabase_client()
+
+else:
+
+    @lru_cache(maxsize=1)
+    def get_supabase_client() -> Any:
+        return _create_supabase_client()
 
 
 def insert_rows(table_name: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
