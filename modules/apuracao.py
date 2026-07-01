@@ -79,6 +79,34 @@ def _resultado_para_csv(resultado: ApuracaoResultado) -> bytes:
     for step in resultado.memoria_calculo:
         writer.writerow([step.get("etapa", ""), step.get("formula", ""), step.get("valor", "")])
 
+    if resultado.detalhes_conferencia:
+        writer.writerow([])
+        writer.writerow(
+            [
+                "arquivo",
+                "operacao",
+                "tipo_icms",
+                "icms_normal",
+                "icms_st",
+                "icms_difal_destino",
+                "icms_difal_origem",
+                "icms_complementar",
+            ]
+        )
+        for row in resultado.detalhes_conferencia:
+            writer.writerow(
+                [
+                    row.get("arquivo", ""),
+                    row.get("operacao", ""),
+                    row.get("tipo_icms", ""),
+                    row.get("icms_normal", ""),
+                    row.get("icms_st", ""),
+                    row.get("icms_difal_destino", ""),
+                    row.get("icms_difal_origem", ""),
+                    row.get("icms_complementar", ""),
+                ]
+            )
+
     return buffer.getvalue().encode("utf-8")
 
 
@@ -100,6 +128,10 @@ def _render_relatorio(resultado: ApuracaoResultado) -> None:
     st.markdown("### Memoria de Calculo")
     st.dataframe(resultado.memoria_calculo, use_container_width=True, hide_index=True)
 
+    if resultado.detalhes_conferencia:
+        st.markdown("### Detalhamento Nota a Nota")
+        st.dataframe(resultado.detalhes_conferencia, use_container_width=True, hide_index=True)
+
     export_payload = {
         "tributo": resultado.tributo,
         "periodo_inicio": resultado.periodo_inicio.isoformat(),
@@ -108,6 +140,7 @@ def _render_relatorio(resultado: ApuracaoResultado) -> None:
         "base_legal": resultado.base_legal,
         "resumo": resultado.resumo,
         "memoria_calculo": resultado.memoria_calculo,
+        "detalhes_conferencia": resultado.detalhes_conferencia,
     }
 
     st.download_button(
@@ -221,6 +254,7 @@ def render_apuracao_module() -> None:
                 resumo=resultado.resumo,
                 memoria_calculo=plugin.gerar_memoria_calculo(resultado),
                 base_legal=resultado.base_legal,
+                detalhes_conferencia=resultado.detalhes_conferencia,
             )
             _render_relatorio(resultado)
         except Exception as exc:

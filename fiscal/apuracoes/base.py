@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from io import BytesIO
 from typing import Any
@@ -20,6 +20,13 @@ class DocumentoFiscal:
     valor_total: float
     base_icms: float
     valor_icms: float
+    valor_icms_st: float
+    valor_icms_difal_destino: float
+    valor_icms_difal_origem: float
+    valor_icms_complementar: float
+    tem_icms_st: bool
+    tem_icms_difal: bool
+    is_complementar: bool
     valor_ipi: float
     valor_pis: float
     valor_cofins: float
@@ -36,9 +43,10 @@ class ApuracaoResultado:
     periodo_inicio: date
     periodo_fim: date
     valor_apurado: float
-    resumo: dict[str, float]
+    resumo: dict[str, float | int]
     memoria_calculo: list[dict[str, Any]]
     base_legal: str
+    detalhes_conferencia: list[dict[str, Any]] = field(default_factory=list)
 
 
 class ApuracaoTributoBase(ABC):
@@ -76,6 +84,27 @@ def parse_documentos_fiscais(xml_files: list[tuple[str, bytes]]) -> list[Documen
 
         data_emissao = _parse_date(_find_text(root, ".//nfe:ide/nfe:dhEmi"))
         operacao = _resolve_operacao(_find_text(root, ".//nfe:ide/nfe:tpNF"))
+        finalidade_nfe = _find_text(root, ".//nfe:ide/nfe:finNFe")
+        info_adicional = " ".join(
+            [
+                _find_text(root, ".//nfe:infAdic/nfe:infAdFisco"),
+                _find_text(root, ".//nfe:infAdic/nfe:infCpl"),
+            ]
+        ).strip()
+
+        valor_icms = _to_float(_find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vICMS"))
+        valor_icms_st = _to_float(_find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vST"))
+        valor_icms_difal_destino = _to_float(
+            _find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vICMSUFDest")
+        )
+        valor_icms_difal_origem = _to_float(
+            _find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vICMSUFRemet")
+        )
+
+        is_complementar = _is_nota_complementar(finalidade_nfe, info_adicional)
+        tem_icms_st = valor_icms_st > 0
+        tem_icms_difal = (valor_icms_difal_destino > 0) or (valor_icms_difal_origem > 0)
+        valor_icms_complementar = valor_icms if is_complementar else 0.0
 
         docs.append(
             DocumentoFiscal(
@@ -84,7 +113,14 @@ def parse_documentos_fiscais(xml_files: list[tuple[str, bytes]]) -> list[Documen
                 operacao=operacao,
                 valor_total=_to_float(_find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vNF")),
                 base_icms=_to_float(_find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vBC")),
-                valor_icms=_to_float(_find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vICMS")),
+                valor_icms=valor_icms,
+                valor_icms_st=valor_icms_st,
+                valor_icms_difal_destino=valor_icms_difal_destino,
+                valor_icms_difal_origem=valor_icms_difal_origem,
+                valor_icms_complementar=valor_icms_complementar,
+                tem_icms_st=tem_icms_st,
+                tem_icms_difal=tem_icms_difal,
+                is_complementar=is_complementar,
                 valor_ipi=_to_float(_find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vIPI")),
                 valor_pis=_to_float(_find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vPIS")),
                 valor_cofins=_to_float(_find_text(root, ".//nfe:total/nfe:ICMSTot/nfe:vCOFINS")),
@@ -138,3 +174,14 @@ def _parse_date(raw: str) -> date | None:
         return datetime.strptime(iso_part, "%Y-%m-%d").date()
     except ValueError:
         return None
+
+
+def _is_nota_complementar(finalidade_nfe: str, info_adicional: str) -> bool:
+    if finalidade_nfe.strip() == "2":
+        return True
+
+    text = (info_adicional or "").strip().lower()
+    if not text:
+        return False
+
+    return ("complement" in text) or ("complementa" in text)
