@@ -20,6 +20,15 @@ CATEGORIAS_DOC = [
     "NAO_IDENTIFICADO",
 ]
 
+MODO_CLASSIFICACAO = [
+    "AUTOMATICA",
+    "NFE_SAIDA",
+    "NFE_ENTRADA",
+    "NFSE_SAIDA",
+    "NFSE_ENTRADA",
+    "NAO_IDENTIFICADO",
+]
+
 
 def _to_float(value: str) -> float:
     try:
@@ -298,7 +307,10 @@ def _save_nfse(
     insert_rows(table_name="notas_servico", rows=[row])
 
 
-def _build_drafts(uploaded_files: list[Any]) -> tuple[list[dict[str, Any]], list[str]]:
+def _build_drafts(
+    uploaded_files: list[Any],
+    classificacao_lote: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
     drafts: list[dict[str, Any]] = []
     errors: list[str] = []
 
@@ -325,6 +337,13 @@ def _build_drafts(uploaded_files: list[Any]) -> tuple[list[dict[str, Any]], list
             tipo_documento = "NFE"
             categoria = _classificar_nfe(root)
             cnpj_emitente, cnpj_destinatario = _extract_doc_emit_dest(root)
+
+        if classificacao_lote != "AUTOMATICA":
+            categoria = classificacao_lote
+            if categoria.startswith("NFE"):
+                tipo_documento = "NFE"
+            elif categoria.startswith("NFSE"):
+                tipo_documento = "NFSE"
 
         drafts.append(
             {
@@ -470,8 +489,16 @@ def render_importacao_central() -> None:
         accept_multiple_files=True,
     )
 
+    classificacao_lote = st.radio(
+        "Tipo de XML do lote",
+        MODO_CLASSIFICACAO,
+        index=0,
+        horizontal=True,
+        help="Use AUTOMATICA para detectar pelo XML ou force o tipo para todo o lote.",
+    )
+
     if uploaded_files and st.button("Analisar lote", type="primary"):
-        drafts, errors = _build_drafts(uploaded_files)
+        drafts, errors = _build_drafts(uploaded_files, classificacao_lote)
         st.session_state["importacao_drafts"] = drafts
 
         if errors:
