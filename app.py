@@ -4,7 +4,7 @@ from app.pages.contabil import render_contabil_module
 from app.pages.dashboard import render_dashboard
 from app.pages.dp import render_dp_module
 from modules.apuracao import render_apuracao_module
-from modules.clientes import render_cadastro_clientes
+from modules.cadastro.gestao_terceiros import render_gestao_terceiros
 from modules.fiscal import render_fiscal_module
 from modules.produtos import render_produtos_module
 from modules.relatorio_clientes import render_relatorio_clientes
@@ -58,7 +58,7 @@ def main() -> None:
 		"05 Cadastro de Produtos": render_produtos_module,
 		"06 Modulo Contabil": render_contabil_module,
 		"07 Modulo DP": render_dp_module,
-		"08 Gestao de Clientes": render_cadastro_clientes,
+		"08 Gestao de Clientes": render_gestao_terceiros,
 		"09 Relatorio de Clientes": render_relatorio_clientes,
 	}
 	render_shell_header(section.split(" ", 1)[1])
